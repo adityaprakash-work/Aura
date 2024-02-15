@@ -483,6 +483,6 @@ class LightningATCNet(L.LightningModule):
         optimizer = torch.optim.AdamW(
             self.model.parameters(),
             lr=0.001,
-            weight_decay=0.004,
+            weight_decay=0.000,
         )
         return optimizer
