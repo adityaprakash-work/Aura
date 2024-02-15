@@ -428,14 +428,14 @@ class ATCNet(nn.Module):
 
 # ---ATCNET-LIGHTNING-----------------------------------------------------------
 class LightningATCNet(L.LightningModule):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, num_classes, *model_args, **model_kwargs):
         super().__init__()
         self.save_hyperparameters()
-        self.model = ATCNet(*args, **kwargs)
+        self.model = ATCNet(*model_args, **model_kwargs)
         self.loss = nn.NLLLoss()
-        self.train_acc = torchmetrics.Accuracy()
-        self.val_acc = torchmetrics.Accuracy()
-        self.test_acc = torchmetrics.Accuracy()
+        self.accuracy = torchmetrics.Accuracy(
+            task="multiclass", num_classes=num_classes
+        )
 
     def forward(self, X):
         return self.model(X)
@@ -444,7 +444,9 @@ class LightningATCNet(L.LightningModule):
         X, y = batch
         y_hat = self.model(X)
         loss = self.loss(y_hat, y)
-        accu = self.train_acc(y_hat, y)
+        y = torch.argmax(y, dim=1)
+        y_hat = torch.argmax(y_hat, dim=1)
+        accu = self.accuracy(y_hat, y)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log("train_acc", accu, on_step=True, on_epoch=True, prog_bar=True)
         return loss
@@ -453,7 +455,9 @@ class LightningATCNet(L.LightningModule):
         X, y = batch
         y_hat = self.model(X)
         loss = self.loss(y_hat, y)
-        accu = self.val_acc(y_hat, y)
+        y = torch.argmax(y, dim=1)
+        y_hat = torch.argmax(y_hat, dim=1)
+        accu = self.accuracy(y_hat, y)
         self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log("val_acc", accu, on_step=True, on_epoch=True, prog_bar=True)
         return loss
@@ -461,11 +465,12 @@ class LightningATCNet(L.LightningModule):
     def test_step(self, batch, batch_idx):
         X, y = batch
         y_hat = self.model(X)
-        accu = self.test_acc(y_hat, y)
+        y = torch.argmax(y, dim=1)
+        y_hat = torch.argmax(y_hat, dim=1)
+        accu = self.accuracy(y_hat, y)
         self.log("test_acc", accu, on_step=True, on_epoch=True, prog_bar=True)
         return accu
 
-    # Optimizer and learning rate scheduler
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(
             self.model.parameters(),
@@ -475,7 +480,7 @@ class LightningATCNet(L.LightningModule):
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=10,
-            eta_min=0,
+            eta_min=1e-4,
         )
         return {
             "optimizer": optimizer,
@@ -483,7 +488,4 @@ class LightningATCNet(L.LightningModule):
                 "scheduler": scheduler,
                 "interval": "step",
             },
-        }    
-        
-
-
+        }

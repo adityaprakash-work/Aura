@@ -156,29 +156,92 @@ class SSLDataModule(LightningDataModule):
     """
     Subject Specific LightningDataModule
     """
+    class _Dataset(torch.utils.data.Dataset):
+        def __init__(self, X, Y, n_outputs=2):
+            self.X = X
+            self.Y = Y
+            self.n_outputs = n_outputs
+
+        def __len__(self):
+            return len(self.X)
+
+        def __getitem__(self, idx):
+            x = torch.tensor(self.X[idx], dtype=torch.float32)
+            y = torch.tensor(self.Y[idx], dtype=torch.long)
+            y = torch.nn.functional.one_hot(y, num_classes=self.n_outputs)
+            return x, y
+
     def __init__(
         self,
-        X_path,
-        Y_path,
-        S_path,
+        X, 
+        Y,
+        S,
         test_size=0.1,
         val_size=0.1,
-        batch_size=16,
+        batch_size=32,
         num_workers=0,
+        pin_memory=False,
+        shuffle=True,
     ):
-        self.save_hyperparameters()
-        self.X_path = X_path
-        self.Y_path = Y_path
-        self.S_path = S_path
+        super().__init__()
+        self.X = X
+        self.Y = Y
+        self.S = S
         self.test_size = test_size
         self.val_size = val_size
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.pin_memory = pin_memory
+        self.shuffle = shuffle
 
     def setup(self, stage=None):
-        X = torch.load(self.X_path)
-        Y = torch.load(self.Y_path)
-        S = torch.load(self.S_path)
+        unique_subjects = np.unique(self.S)
+        ns = len(unique_subjects)
+        nte = int(self.test_size * ns)
+        nva = int(self.val_size * ns)
+        np.random.shuffle(unique_subjects)
+        tes = unique_subjects[:nte]
+        vas = unique_subjects[nte:nte+nva]
+        trs = unique_subjects[nte+nva:]
+        self.trs = trs
+        self.vas = vas
+        self.tes = tes
+
+    def train_dataloader(self):
+        idx = np.isin(self.S, self.trs)
+        X = self.X[idx]
+        Y = self.Y[idx]
+        return torch.utils.data.DataLoader(
+            self._Dataset(X, Y),
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,
+            shuffle=self.shuffle,
+        )
+    
+    def val_dataloader(self):
+        idx = np.isin(self.S, self.vas)
+        X = self.X[idx]
+        Y = self.Y[idx]
+        return torch.utils.data.DataLoader(
+            self._Dataset(X, Y),
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,
+            shuffle=self.shuffle,
+        )
+    
+    def test_dataloader(self):
+        idx = np.isin(self.S, self.tes)
+        X = self.X[idx]
+        Y = self.Y[idx]
+        return torch.utils.data.DataLoader(
+            self._Dataset(X, Y),
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=self.pin_memory,
+            shuffle=self.shuffle,
+        )
         
         
 
