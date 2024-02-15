@@ -176,6 +176,7 @@ class SSLDataModule(LightningDataModule):
         X, 
         Y,
         S,
+        select_classes=None,
         test_size=0.1,
         val_size=0.1,
         batch_size=32,
@@ -184,9 +185,20 @@ class SSLDataModule(LightningDataModule):
         shuffle=True,
     ):
         super().__init__()
-        self.X = X
-        self.Y = Y
-        self.S = S
+        if select_classes is not None:
+            idx = np.isin(self.Y, select_classes)
+            self.X = X[idx]
+            self.Y = Y[idx]
+            self.S = S[idx]
+            unique_Y = sorted(np.unique(self.Y))
+            for i, y in enumerate(unique_Y):
+                self.Y[self.Y == y] = i
+            self.n_outputs = len(unique_Y)
+        else:
+            self.X = X
+            self.Y = Y
+            self.S = S
+            self.n_outputs = len(np.unique(Y))
         self.test_size = test_size
         self.val_size = val_size
         self.batch_size = batch_size
@@ -212,7 +224,7 @@ class SSLDataModule(LightningDataModule):
         X = self.X[idx]
         Y = self.Y[idx]
         return torch.utils.data.DataLoader(
-            self._Dataset(X, Y),
+            self._Dataset(X, Y, self.n_outputs),
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
@@ -224,11 +236,11 @@ class SSLDataModule(LightningDataModule):
         X = self.X[idx]
         Y = self.Y[idx]
         return torch.utils.data.DataLoader(
-            self._Dataset(X, Y),
+            self._Dataset(X, Y, self.n_outputs),
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            shuffle=self.shuffle,
+            shuffle=False,
         )
     
     def test_dataloader(self):
@@ -236,11 +248,11 @@ class SSLDataModule(LightningDataModule):
         X = self.X[idx]
         Y = self.Y[idx]
         return torch.utils.data.DataLoader(
-            self._Dataset(X, Y),
+            self._Dataset(X, Y, self.n_outputs),
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            shuffle=self.shuffle,
+            shuffle=False,
         )
         
         

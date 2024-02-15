@@ -428,13 +428,18 @@ class ATCNet(nn.Module):
 
 # ---ATCNET-LIGHTNING-----------------------------------------------------------
 class LightningATCNet(L.LightningModule):
-    def __init__(self, num_classes, *model_args, **model_kwargs):
+    def __init__(self, *model_args, **model_kwargs):
         super().__init__()
         self.save_hyperparameters()
         self.model = ATCNet(*model_args, **model_kwargs)
         self.loss = nn.NLLLoss()
         self.accuracy = torchmetrics.Accuracy(
-            task="multiclass", num_classes=num_classes
+            task="multiclass", num_classes=self.model.n_outputs
+        )
+        self.example_input_array = torch.rand(
+            1, 
+            self.model.n_chans,
+            int(self.model.input_window_seconds * self.model.sfreq),
         )
 
     def forward(self, X):
@@ -442,10 +447,10 @@ class LightningATCNet(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         X, y = batch
+        y = torch.argmax(y, dim=1).long()
         y_hat = self.model(X)
+        y_hat = torch.argmax(y_hat, dim=1).long()
         loss = self.loss(y_hat, y)
-        y = torch.argmax(y, dim=1)
-        y_hat = torch.argmax(y_hat, dim=1)
         accu = self.accuracy(y_hat, y)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log("train_acc", accu, on_step=True, on_epoch=True, prog_bar=True)
@@ -453,10 +458,10 @@ class LightningATCNet(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         X, y = batch
+        y = torch.argmax(y, dim=1).long()
         y_hat = self.model(X)
+        y_hat = torch.argmax(y_hat, dim=1).long()
         loss = self.loss(y_hat, y)
-        y = torch.argmax(y, dim=1)
-        y_hat = torch.argmax(y_hat, dim=1)
         accu = self.accuracy(y_hat, y)
         self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log("val_acc", accu, on_step=True, on_epoch=True, prog_bar=True)
@@ -464,9 +469,9 @@ class LightningATCNet(L.LightningModule):
 
     def test_step(self, batch, batch_idx):
         X, y = batch
+        y = torch.argmax(y, dim=1).long()
         y_hat = self.model(X)
-        y = torch.argmax(y, dim=1)
-        y_hat = torch.argmax(y_hat, dim=1)
+        y_hat = torch.argmax(y_hat, dim=1).long()
         accu = self.accuracy(y_hat, y)
         self.log("test_acc", accu, on_step=True, on_epoch=True, prog_bar=True)
         return accu
