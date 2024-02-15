@@ -447,10 +447,10 @@ class LightningATCNet(L.LightningModule):
 
     def training_step(self, batch, batch_idx):
         X, y = batch
-        y = torch.argmax(y, dim=1).long()
         y_hat = self.model(X)
-        y_hat = torch.argmax(y_hat, dim=1).long()
         loss = self.loss(y_hat, y)
+        y_hat = torch.argmax(y_hat, dim=1).long()
+        y = torch.argmax(y, dim=1).long()
         accu = self.accuracy(y_hat, y)
         self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log("train_acc", accu, on_step=True, on_epoch=True, prog_bar=True)
@@ -458,10 +458,10 @@ class LightningATCNet(L.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         X, y = batch
-        y = torch.argmax(y, dim=1).long()
         y_hat = self.model(X)
-        y_hat = torch.argmax(y_hat, dim=1).long()
         loss = self.loss(y_hat, y)
+        y_hat = torch.argmax(y_hat, dim=1).long()
+        y = torch.argmax(y, dim=1).long()
         accu = self.accuracy(y_hat, y)
         self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
         self.log("val_acc", accu, on_step=True, on_epoch=True, prog_bar=True)
