@@ -485,15 +485,4 @@ class LightningATCNet(L.LightningModule):
             lr=0.001,
             weight_decay=0.004,
         )
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            T_max=30,
-            eta_min=1e-4,
-        )
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "epoch",
-            },
-        }
+        return optimizer
