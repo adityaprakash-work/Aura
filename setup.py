@@ -14,7 +14,7 @@ EMAIL = "adityaprakash.work@gmail.com"
 AUTHOR = "Aditya Prakash"
 REQUIRES_PYTHON = ">=3.9.0"
 VERSION = "0.5.0"
-REQUIRED = ["tqdm, lightning, mne, torchmetrics"]
+REQUIRED = ["tqdm", "lightning", "mne", "torchmetrics"]
 EXTRAS = {}
 
 # ---SETUP----------------------------------------------------------------------
