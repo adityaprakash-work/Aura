@@ -186,7 +186,7 @@ class SSLDataModule(LightningDataModule):
     ):
         super().__init__()
         if select_classes is not None:
-            idx = np.isin(self.Y, select_classes)
+            idx = np.isin(Y, select_classes)
             self.X = X[idx]
             self.Y = Y[idx]
             self.S = S[idx]

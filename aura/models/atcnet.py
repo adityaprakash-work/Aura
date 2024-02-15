@@ -379,7 +379,7 @@ class ATCNet(nn.Module):
                 ]
             )
 
-        self.out_fun = nn.LogSoftmax(dim=1)
+        self.out_fun = nn.Softmax(dim=1)
 
     def forward(self, X):
         # shape: (batch_size, C, T)
@@ -432,7 +432,7 @@ class LightningATCNet(L.LightningModule):
         super().__init__()
         self.save_hyperparameters()
         self.model = ATCNet(*model_args, **model_kwargs)
-        self.loss = nn.NLLLoss()
+        self.loss = nn.CrossEntropyLoss()
         self.accuracy = torchmetrics.Accuracy(
             task="multiclass", num_classes=self.model.n_outputs
         )
