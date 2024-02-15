@@ -15,7 +15,6 @@ from einops.layers.torch import Rearrange
 from .modules import Ensure4d, MaxNormLinear, CausalConv1d
 
 
-
 # ---CONV BLOCKS----------------------------------------------------------------
 class _ConvBlock(nn.Module):
     def __init__(
@@ -244,15 +243,16 @@ class _MHA(nn.Module):
         out = self.fc_o(H)
 
         return self.dropout(out)
-    
+
+
 # ---ATCNET---------------------------------------------------------------------
 class ATCNet(nn.Module):
-     def __init__(
+    def __init__(
         self,
         n_chans=None,
         n_outputs=None,
-        input_window_seconds=4.5,
-        sfreq=250.,
+        input_window_seconds=10,
+        sfreq=125.0,
         conv_block_n_filters=16,
         conv_block_kernel_size_1=64,
         conv_block_kernel_size_2=16,
@@ -271,30 +271,12 @@ class ATCNet(nn.Module):
         tcn_activation=nn.ELU(),
         concat=False,
         max_norm_const=0.25,
-        chs_info=None,
-        n_times=None,
-        n_channels=None,
-        n_classes=None,
-        input_size_s=None,
-        add_log_softmax=True,
     ):
-        n_chans, n_outputs, input_window_seconds = deprecated_args(
-            self,
-            ('n_channels', 'n_chans', n_channels, n_chans),
-            ('n_classes', 'n_outputs', n_classes, n_outputs),
-            ('input_size_s', 'input_window_seconds', input_size_s, input_window_seconds),
-        )
-        super().__init__(
-            n_outputs=n_outputs,
-            n_chans=n_chans,
-            chs_info=chs_info,
-            n_times=n_times,
-            input_window_seconds=input_window_seconds,
-            sfreq=sfreq,
-            add_log_softmax=add_log_softmax,
-        )
-        del n_outputs, n_chans, chs_info, n_times, input_window_seconds, sfreq
-        del n_channels, n_classes, input_size_s
+        super().__init__()
+        self.n_chans = n_chans
+        self.n_outputs = n_outputs
+        self.input_window_seconds = input_window_seconds
+        self.sfreq = sfreq
         self.conv_block_n_filters = conv_block_n_filters
         self.conv_block_kernel_size_1 = conv_block_kernel_size_1
         self.conv_block_kernel_size_2 = conv_block_kernel_size_2
@@ -316,8 +298,8 @@ class ATCNet(nn.Module):
 
         map = dict()
         for w in range(self.n_windows):
-            map[f'max_norm_linears.[{w}].weight'] = f'final_layer.[{w}].weight'
-            map[f'max_norm_linears.[{w}].bias'] = f'final_layer.[{w}].bias'
+            map[f"max_norm_linears.[{w}].weight"] = f"final_layer.[{w}].weight"
+            map[f"max_norm_linears.[{w}].bias"] = f"final_layer.[{w}].bias"
         self.mapping = map
 
         # Check later if we want to keep the Ensure4d. Not sure if we can
@@ -328,99 +310,109 @@ class ATCNet(nn.Module):
         self.conv_block = _ConvBlock(
             n_channels=self.n_chans,  # input shape: (batch_size, 1, T, C)
             n_filters=conv_block_n_filters,
-            kernel_length_1=conv_block_kernel_size_1,
-            kernel_length_2=conv_block_kernel_size_2,
+            kernel_size_1=conv_block_kernel_size_1,
+            kernel_size_2=conv_block_kernel_size_2,
             pool_size_1=conv_block_pool_size_1,
             pool_size_2=conv_block_pool_size_2,
             depth_mult=conv_block_depth_mult,
-            dropout=conv_block_dropout
+            dropout=conv_block_dropout,
         )
 
         self.F2 = int(conv_block_depth_mult * conv_block_n_filters)
-        self.Tc = int(self.input_window_seconds * self.sfreq / (
-                conv_block_pool_size_1 * conv_block_pool_size_2))
+        self.Tc = int(
+            self.input_window_seconds
+            * self.sfreq
+            / (conv_block_pool_size_1 * conv_block_pool_size_2)
+        )
         self.Tw = self.Tc - self.n_windows + 1
 
-        self.attention_blocks = nn.ModuleList([
-            _AttentionBlock(
-                in_shape=self.F2,
-                head_dim=self.att_head_dim,
-                num_heads=att_num_heads,
-                dropout=att_dropout,
-            ) for _ in range(self.n_windows)
-        ])
+        self.attention_blocks = nn.ModuleList(
+            [
+                _AttentionBlock(
+                    in_shape=self.F2,
+                    head_dim=self.att_head_dim,
+                    num_heads=att_num_heads,
+                    dropout=att_dropout,
+                )
+                for _ in range(self.n_windows)
+            ]
+        )
 
-        self.temporal_conv_nets = nn.ModuleList([
-            nn.Sequential(
-                *[_TCNResidualBlock(
-                    in_channels=self.F2,
-                    kernel_size=tcn_kernel_size,
-                    n_filters=tcn_n_filters,
-                    dropout=tcn_dropout,
-                    activation=tcn_activation,
-                    dilation=2 ** i
-                ) for i in range(tcn_depth)]
-            ) for _ in range(self.n_windows)
-        ])
+        self.temporal_conv_nets = nn.ModuleList(
+            [
+                nn.Sequential(
+                    *[
+                        _TCNResidualBlock(
+                            in_channels=self.F2,
+                            kernel_size=tcn_kernel_size,
+                            n_filters=tcn_n_filters,
+                            dropout=tcn_dropout,
+                            activation=tcn_activation,
+                            dilation=2**i,
+                        )
+                        for i in range(tcn_depth)
+                    ]
+                )
+                for _ in range(self.n_windows)
+            ]
+        )
 
         if self.concat:
-            self.final_layer = nn.ModuleList([
-                MaxNormLinear(
-                    in_features=self.F2 * self.n_windows,
-                    out_features=self.n_outputs,
-                    max_norm_val=self.max_norm_const
-                )
-            ])
+            self.final_layer = nn.ModuleList(
+                [
+                    MaxNormLinear(
+                        in_features=self.F2 * self.n_windows,
+                        out_features=self.n_outputs,
+                        max_norm_val=self.max_norm_const,
+                    )
+                ]
+            )
         else:
-            self.final_layer = nn.ModuleList([
-                MaxNormLinear(
-                    in_features=self.F2,
-                    out_features=self.n_outputs,
-                    max_norm_val=self.max_norm_const
-                ) for _ in range(self.n_windows)
-            ])
+            self.final_layer = nn.ModuleList(
+                [
+                    MaxNormLinear(
+                        in_features=self.F2,
+                        out_features=self.n_outputs,
+                        max_norm_val=self.max_norm_const,
+                    )
+                    for _ in range(self.n_windows)
+                ]
+            )
 
-        if self.add_log_softmax:
-            self.out_fun = nn.LogSoftmax(dim=1)
-        else:
-            self.out_fun = nn.Identity()
+        self.out_fun = nn.LogSoftmax(dim=1)
 
     def forward(self, X):
-        # Dimension: (batch_size, C, T)
+        # shape: (batch_size, C, T)
         X = self.ensuredims(X)
-        # Dimension: (batch_size, C, T, 1)
+        # shape: (batch_size, C, T, 1)
         X = self.dimshuffle(X)
-        # Dimension: (batch_size, 1, T, C)
+        # shape: (batch_size, 1, T, C)
 
-        # ----- Sliding window -----
+        # --Sliding window
         conv_feat = self.conv_block(X)
-        # Dimension: (batch_size, F2, Tc, 1)
+        # shape: (batch_size, F2, Tc, 1)
         conv_feat = conv_feat.view(-1, self.F2, self.Tc)
-        # Dimension: (batch_size, F2, Tc)
+        # shape: (batch_size, F2, Tc)
 
-        # ----- Sliding window -----
+        # --Sliding window
         sw_concat = []  # to store sliding window outputs
         for w in range(self.n_windows):
-            conv_feat_w = conv_feat[..., w:w + self.Tw]
-            # Dimension: (batch_size, F2, Tw)
-
-            # ----- Attention block -----
+            conv_feat_w = conv_feat[..., w : w + self.Tw]
+            # shape: (batch_size, F2, Tw)
+            # --Attention block
             att_feat = self.attention_blocks[w](conv_feat_w)
-            # Dimension: (batch_size, F2, Tw)
-
-            # ----- Temporal convolutional network (TCN) -----
+            # shape: (batch_size, F2, Tw)
+            # --Temporal convolutional network (TCN)
             tcn_feat = self.temporal_conv_nets[w](att_feat)[..., -1]
-            # Dimension: (batch_size, F2)
-
+            # shape: (batch_size, F2)
             # Outputs of sliding window can be either averaged after being
             # mapped by dense layer or concatenated then mapped by a dense
             # layer
             if not self.concat:
                 tcn_feat = self.final_layer[w](tcn_feat)
-
             sw_concat.append(tcn_feat)
 
-        # ----- Aggregation and prediction -----
+        # --Aggregation and prediction
         if self.concat:
             sw_concat = torch.cat(sw_concat, dim=1)
             sw_concat = self.final_layer[0](sw_concat)
@@ -432,3 +424,66 @@ class ATCNet(nn.Module):
                 sw_concat = sw_concat[0]
 
         return self.out_fun(sw_concat)
+
+
+# ---ATCNET-LIGHTNING-----------------------------------------------------------
+class LightningATCNet(L.LightningModule):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+        self.save_hyperparameters()
+        self.model = ATCNet(*args, **kwargs)
+        self.loss = nn.NLLLoss()
+        self.train_acc = torchmetrics.Accuracy()
+        self.val_acc = torchmetrics.Accuracy()
+        self.test_acc = torchmetrics.Accuracy()
+
+    def forward(self, X):
+        return self.model(X)
+
+    def training_step(self, batch, batch_idx):
+        X, y = batch
+        y_hat = self.model(X)
+        loss = self.loss(y_hat, y)
+        accu = self.train_acc(y_hat, y)
+        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log("train_acc", accu, on_step=True, on_epoch=True, prog_bar=True)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        X, y = batch
+        y_hat = self.model(X)
+        loss = self.loss(y_hat, y)
+        accu = self.val_acc(y_hat, y)
+        self.log("val_loss", loss, on_step=True, on_epoch=True, prog_bar=True)
+        self.log("val_acc", accu, on_step=True, on_epoch=True, prog_bar=True)
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        X, y = batch
+        y_hat = self.model(X)
+        accu = self.test_acc(y_hat, y)
+        self.log("test_acc", accu, on_step=True, on_epoch=True, prog_bar=True)
+        return accu
+
+    # Optimizer and learning rate scheduler
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(
+            self.model.parameters(),
+            lr=0.001,
+            weight_decay=0.004,
+        )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=10,
+            eta_min=0,
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+            },
+        }    
+        
+
+

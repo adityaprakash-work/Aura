@@ -6,6 +6,7 @@
 
 # ---DEPENDENCIES---------------------------------------------------------------
 import mne
+import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 from lightning import LightningDataModule
@@ -148,3 +149,37 @@ class EEGLightningDataModule(LightningDataModule):
             num_workers=self.num_workers,
             shuffle=False,
         )
+
+
+# ---SUBJECT SPECIFIC DATASET---------------------------------------------------
+class SSLDataModule(LightningDataModule):
+    """
+    Subject Specific LightningDataModule
+    """
+    def __init__(
+        self,
+        X_path,
+        Y_path,
+        S_path,
+        test_size=0.1,
+        val_size=0.1,
+        batch_size=16,
+        num_workers=0,
+    ):
+        self.save_hyperparameters()
+        self.X_path = X_path
+        self.Y_path = Y_path
+        self.S_path = S_path
+        self.test_size = test_size
+        self.val_size = val_size
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+
+    def setup(self, stage=None):
+        X = torch.load(self.X_path)
+        Y = torch.load(self.Y_path)
+        S = torch.load(self.S_path)
+        
+        
+
+

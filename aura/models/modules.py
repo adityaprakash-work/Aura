@@ -10,12 +10,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class Ensure4d(nn.Module):
     def forward(self, x):
         while len(x.shape) < 4:
             x = x.unsqueeze(-1)
         return x
-    
+
+
 class CausalConv1d(nn.Conv1d):
     def __init__(
         self,
@@ -47,10 +49,19 @@ class CausalConv1d(nn.Conv1d):
 
 class MaxNormLinear(nn.Linear):
     def __init__(
-        self, in_features, out_features, bias=True, max_norm_val=2, eps=1e-5, **kwargs,
+        self,
+        in_features,
+        out_features,
+        bias=True,
+        max_norm_val=2,
+        eps=1e-5,
+        **kwargs,
     ):
         super().__init__(
-            in_features=in_features, out_features=out_features, bias=bias, **kwargs,
+            in_features=in_features,
+            out_features=out_features,
+            bias=bias,
+            **kwargs,
         )
         self._max_norm_val = max_norm_val
         self._eps = eps
